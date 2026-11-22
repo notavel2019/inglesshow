@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">VoxForm</string>
+    <string name="studio_tagline">General American Pronunciation Studio</string>
+    <string name="auth_headline">Master clear General American speech.</string>
+    <string name="auth_subtitle">Progressive shadowing, interactive 2D vocal-tract mechanics, and multimodal AI acoustic coaching synced across your devices.</string>
+    <string name="sign_in_google">Sign in with Google</string>
+    <string name="signing_in">Signing in…</string>
+    <string name="nav_studio">Studio</string>
+    <string name="nav_shadow">Shadow</string>
+    <string name="nav_mouth_lab">Mouth Lab</string>
+    <string name="nav_progress">Progress</string>
+    <string name="mic_permission_rationale">Microphone access is required to record your voice for live waveform feedback and AI phoneme scoring.</string>
+    <string name="grant_mic_permission">Enable Microphone</string>
+    <string name="sign_out">Sign out</string>
+    <string name="update_section_title">Atualização do App (APK)</string>
+    <string name="update_check_button">Verificar atualização</string>
+    <string name="update_download_apk">Atualizar • Baixar APK</string>
+</resources>

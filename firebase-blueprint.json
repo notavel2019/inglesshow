@@ -1,0 +1,204 @@
+{
+  "entities": {
+    "LearnerProfile": {
+      "title": "LearnerProfile",
+      "description": "Authenticated learner settings and overall General American pronunciation readiness metrics.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the profile owner."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Learner display name shown in the studio header."
+        },
+        "currentStreakDays": {
+          "type": "integer",
+          "description": "Consecutive active practice days."
+        },
+        "totalSessions": {
+          "type": "integer",
+          "description": "Total completed AI acoustic evaluation sessions."
+        },
+        "overallClarityScore": {
+          "type": "integer",
+          "description": "Rolling clarity readiness score from 0 to 100."
+        },
+        "preferredStartSpeed": {
+          "type": "number",
+          "description": "Preferred progressive shadowing start speed multiplier (0.65 to 1.10)."
+        },
+        "focusPhonemeIds": {
+          "type": "array",
+          "description": "Top weak GenAm phoneme identifiers currently prioritized in the feedback loop."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written with FieldValue.serverTimestamp() at profile creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written with FieldValue.serverTimestamp() on every update."
+        }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "currentStreakDays",
+        "totalSessions",
+        "overallClarityScore",
+        "preferredStartSpeed",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PhonemeMastery": {
+      "title": "PhonemeMastery",
+      "description": "Per-phoneme General American mastery score, attempt history, and personalized coaching note.",
+      "type": "object",
+      "properties": {
+        "phonemeId": {
+          "type": "string",
+          "description": "Stable ASCII phoneme identifier matching the document ID."
+        },
+        "ipaSymbol": {
+          "type": "string",
+          "description": "IPA representation such as /θ/ or /ɹ/."
+        },
+        "category": {
+          "type": "string",
+          "description": "Articulatory family label (e.g., Dental, Rhotic, Vowel)."
+        },
+        "masteryScore": {
+          "type": "integer",
+          "description": "Exponentially weighted moving average mastery score from 0 to 100."
+        },
+        "attemptCount": {
+          "type": "integer",
+          "description": "Number of times this phoneme was evaluated."
+        },
+        "recommendedSpeed": {
+          "type": "number",
+          "description": "Recommended shadowing tempo multiplier for this phoneme (0.65 to 1.10)."
+        },
+        "recentIssueNote": {
+          "type": "string",
+          "description": "Most recent physical articulation coaching tip detected by Gemini."
+        },
+        "lastPracticedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest practice evaluation for this phoneme."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written with FieldValue.serverTimestamp() at creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written with FieldValue.serverTimestamp() on update."
+        }
+      },
+      "required": [
+        "phonemeId",
+        "ipaSymbol",
+        "category",
+        "masteryScore",
+        "attemptCount",
+        "recommendedSpeed",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PracticeSession": {
+      "title": "PracticeSession",
+      "description": "Immutable log of a completed shadowing take and multimodal AI acoustic evaluation.",
+      "type": "object",
+      "properties": {
+        "phraseId": {
+          "type": "string",
+          "description": "Identifier of the shadowed phrase or generated drill."
+        },
+        "phraseText": {
+          "type": "string",
+          "description": "The General American English sentence practiced."
+        },
+        "targetPhonemes": {
+          "type": "array",
+          "description": "Bounded list of target phoneme IDs evaluated in this take."
+        },
+        "speedMultiplier": {
+          "type": "number",
+          "description": "Shadowing tempo multiplier used during the take."
+        },
+        "overallScore": {
+          "type": "integer",
+          "description": "Overall acoustic intelligibility score from 0 to 100."
+        },
+        "phonemeAccuracy": {
+          "type": "integer",
+          "description": "Phoneme precision sub-score from 0 to 100."
+        },
+        "rhythmScore": {
+          "type": "integer",
+          "description": "Syllable stress and rhythm sub-score from 0 to 100."
+        },
+        "flowScore": {
+          "type": "integer",
+          "description": "Connected speech flow sub-score from 0 to 100."
+        },
+        "coachingSummary": {
+          "type": "string",
+          "description": "Concise AI acoustic feedback summary."
+        },
+        "nextStepRecommendation": {
+          "type": "string",
+          "description": "Recommended next tempo or articulatory focus."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp written with FieldValue.serverTimestamp() when saved."
+        }
+      },
+      "required": [
+        "phraseId",
+        "phraseText",
+        "targetPhonemes",
+        "speedMultiplier",
+        "overallScore",
+        "phonemeAccuracy",
+        "rhythmScore",
+        "flowScore",
+        "coachingSummary",
+        "nextStepRecommendation",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/LearnerProfile"
+      },
+      "description": "Owner-scoped learner profile storing readiness index, streak, and preferred shadowing speed."
+    },
+    "/users/{userId}/phonemeMastery/{phonemeId}": {
+      "schema": {
+        "$ref": "#/entities/PhonemeMastery"
+      },
+      "description": "Owner-scoped per-phoneme General American mastery metrics driving the personalized feedback loop."
+    },
+    "/users/{userId}/practiceSessions/{sessionId}": {
+      "schema": {
+        "$ref": "#/entities/PracticeSession"
+      },
+      "description": "Owner-scoped append-only history of AI acoustic evaluations and shadowing sessions."
+    }
+  }
+}

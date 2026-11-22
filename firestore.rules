@@ -1,0 +1,173 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny all access unless explicitly matched and verified below.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Hardened Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isValidSpeed(speed) {
+      return (speed is float || speed is int) && speed >= 0.5 && speed <= 1.5;
+    }
+
+    function isValidScore(score) {
+      return score is int && score >= 0 && score <= 100;
+    }
+
+    function isValidStringList(listVal, maxLen) {
+      return listVal is list &&
+             listVal.size() <= maxLen &&
+             (listVal.size() == 0 || (listVal[0] is string && listVal[0].size() <= 64));
+    }
+
+    // --- Entity Validation Blueprints ---
+    function isValidLearnerProfile(data, userId) {
+      return data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.currentStreakDays is int && data.currentStreakDays >= 0 && data.currentStreakDays <= 10000 &&
+             data.totalSessions is int && data.totalSessions >= 0 && data.totalSessions <= 100000 &&
+             isValidScore(data.overallClarityScore) &&
+             isValidSpeed(data.preferredStartSpeed) &&
+             (!('focusPhonemeIds' in data) || data.focusPhonemeIds == null || isValidStringList(data.focusPhonemeIds, 10)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPhonemeMastery(data, phonemeId) {
+      return data.phonemeId is string && data.phonemeId == phonemeId && data.phonemeId.size() >= 1 && data.phonemeId.size() <= 40 &&
+             data.ipaSymbol is string && data.ipaSymbol.size() >= 1 && data.ipaSymbol.size() <= 16 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+             isValidScore(data.masteryScore) &&
+             data.attemptCount is int && data.attemptCount >= 0 && data.attemptCount <= 100000 &&
+             isValidSpeed(data.recommendedSpeed) &&
+             (!('recentIssueNote' in data) || data.recentIssueNote == null || (data.recentIssueNote is string && data.recentIssueNote.size() <= 300)) &&
+             (!('lastPracticedAt' in data) || data.lastPracticedAt == null || isValidTimestamp(data.lastPracticedAt)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPracticeSession(data) {
+      return data.phraseId is string && data.phraseId.size() >= 1 && data.phraseId.size() <= 80 &&
+             data.phraseText is string && data.phraseText.size() >= 1 && data.phraseText.size() <= 300 &&
+             isValidStringList(data.targetPhonemes, 10) &&
+             isValidSpeed(data.speedMultiplier) &&
+             isValidScore(data.overallScore) &&
+             isValidScore(data.phonemeAccuracy) &&
+             isValidScore(data.rhythmScore) &&
+             isValidScore(data.flowScore) &&
+             data.coachingSummary is string && data.coachingSummary.size() >= 1 && data.coachingSummary.size() <= 600 &&
+             data.nextStepRecommendation is string && data.nextStepRecommendation.size() >= 1 && data.nextStepRecommendation.size() <= 300 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    // --- Collection Rules ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'displayName', 'currentStreakDays', 'totalSessions',
+                         'overallClarityScore', 'preferredStartSpeed', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'displayName', 'currentStreakDays', 'totalSessions',
+                         'overallClarityScore', 'preferredStartSpeed', 'focusPhonemeIds',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidLearnerProfile(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidLearnerProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'currentStreakDays', 'totalSessions',
+                         'overallClarityScore', 'preferredStartSpeed', 'focusPhonemeIds', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /phonemeMastery/{phonemeId} {
+        allow get: if isOwner(userId) && isValidId(phonemeId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(phonemeId) &&
+                         incoming().keys().hasAll([
+                           'phonemeId', 'ipaSymbol', 'category', 'masteryScore',
+                           'attemptCount', 'recommendedSpeed', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'phonemeId', 'ipaSymbol', 'category', 'masteryScore',
+                           'attemptCount', 'recommendedSpeed', 'recentIssueNote',
+                           'lastPracticedAt', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidPhonemeMastery(incoming(), phonemeId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(phonemeId) &&
+                         isValidPhonemeMastery(incoming(), phonemeId) &&
+                         incoming().phonemeId == existing().phonemeId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'ipaSymbol', 'category', 'masteryScore', 'attemptCount',
+                           'recommendedSpeed', 'recentIssueNote', 'lastPracticedAt', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(phonemeId);
+      }
+
+      match /practiceSessions/{sessionId} {
+        allow get: if isOwner(userId) && isValidId(sessionId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(sessionId) &&
+                         incoming().keys().hasAll([
+                           'phraseId', 'phraseText', 'targetPhonemes', 'speedMultiplier',
+                           'overallScore', 'phonemeAccuracy', 'rhythmScore', 'flowScore',
+                           'coachingSummary', 'nextStepRecommendation', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'phraseId', 'phraseText', 'targetPhonemes', 'speedMultiplier',
+                           'overallScore', 'phonemeAccuracy', 'rhythmScore', 'flowScore',
+                           'coachingSummary', 'nextStepRecommendation', 'createdAt'
+                         ]) &&
+                         isValidPracticeSession(incoming());
+
+        allow update: if false;
+        allow delete: if isOwner(userId) && isValidId(sessionId);
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "VoxForm",
+  "description": "General American English pronunciation studio featuring a progressive shadowing engine, animated 2D mouth mechanics visualizer, multimodal AI acoustic evaluation, and adaptive weak-phoneme feedback loops.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
