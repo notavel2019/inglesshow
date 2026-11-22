@@ -10,6 +10,7 @@ import com.example.domain.PracticePhrase
 import com.example.domain.TempoStep
 import com.example.domain.WordEvaluation
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.Schema
 import com.google.firebase.ai.type.content
@@ -105,11 +106,22 @@ class AiAcousticEngine {
         )
     }
 
+    private fun isFirebaseInitialized(): Boolean {
+        return runCatching { FirebaseApp.getInstance() }.isSuccess
+    }
+
     suspend fun evaluatePronunciation(
         wavBytes: ByteArray,
         phrase: PracticePhrase,
         speed: TempoStep
     ): Result<AcousticEvaluation> {
+        if (!isFirebaseInitialized()) {
+            return Result.failure(
+                IllegalStateException(
+                    "IA Gemini indisponível neste APK (falta app/google-services.json). Adicione o secret GOOGLE_SERVICES_JSON no GitHub Actions e gere um novo APK."
+                )
+            )
+        }
         if (wavBytes.isEmpty()) {
             return Result.failure(IllegalArgumentException("No recorded audio found. Please record your voice first."))
         }
@@ -169,6 +181,13 @@ class AiAcousticEngine {
         focusPhonemes: List<GenAmPhoneme>,
         recentIssueNotes: List<String>
     ): Result<PracticePhrase> {
+        if (!isFirebaseInitialized()) {
+            return Result.failure(
+                IllegalStateException(
+                    "Geração de exercícios por IA requer o secret GOOGLE_SERVICES_JSON configurado no GitHub Actions."
+                )
+            )
+        }
         val selected = focusPhonemes.take(3).ifEmpty { GenAmCatalog.phonemes.take(2) }
         val targetList = selected.joinToString("\n") { "- ${it.id}: ${it.ipa} (${it.name}), example: '${it.exampleWord}'" }
         val notesBlock = recentIssueNotes.filter { it.isNotBlank() }.take(3).joinToString("\n") { "- $it" }

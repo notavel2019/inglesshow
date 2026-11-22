@@ -17,13 +17,32 @@ private const val DEBUG_SECRET_KEY = "com.google.firebase.appcheck.debug.DEBUG_S
 private const val RECAPTCHA_SITE_KEY_RES = "recaptcha_site_key"
 
 /**
+ * Safely checks whether Firebase has been initialized (or can be initialized from google-services resources).
+ * Returns false instead of crashing when an APK is built in CI without app/google-services.json.
+ */
+fun isFirebaseAvailable(context: Context): Boolean {
+    return try {
+        val appContext = context.applicationContext
+        if (FirebaseApp.getApps(appContext).isNotEmpty()) {
+            true
+        } else {
+            FirebaseApp.initializeApp(appContext) != null
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "FirebaseApp unavailable in this build: ${e.message}")
+        false
+    }
+}
+
+/**
  * Configures Firebase App Check before Compose UI, ViewModels, or Firebase APIs initialize.
  * Must be called from MainActivity.onCreate(savedInstanceState) with the launch intent.
  */
 fun configureAppCheck(context: Context, intent: Intent?) {
     try {
-        if (FirebaseApp.getApps(context).isEmpty()) {
-            FirebaseApp.initializeApp(context)
+        if (!isFirebaseAvailable(context)) {
+            Log.w(TAG, "Skipping Firebase App Check: FirebaseApp is not configured in this APK.")
+            return
         }
 
         if (BuildConfig.DEBUG) {

@@ -27,18 +27,25 @@ import kotlinx.coroutines.tasks.await
  * Authenticated Firestore repository targeting the provisioned named database
  * via R.string.firestore_database_id. Never self-authenticates.
  */
-class VoxFormRepository(private val db: FirebaseFirestore) {
+class VoxFormRepository(private val db: FirebaseFirestore?) {
 
     constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        )
+        if (isFirebaseAvailable(context)) {
+            runCatching {
+                FirebaseFirestore.getInstance(
+                    context.applicationContext.getString(R.string.firestore_database_id)
+                )
+            }.getOrNull()
+        } else {
+            null
+        }
     )
 
-    private val auth = Firebase.auth
+    private val auth
+        get() = if (db != null) runCatching { Firebase.auth }.getOrNull() else null
 
     private fun requireUserId(): String {
-        val uid = auth.currentUser?.uid
+        val uid = auth?.currentUser?.uid
         require(!uid.isNullOrBlank()) {
             "User must be signed in with Google before accessing Firestore."
         }
@@ -46,10 +53,15 @@ class VoxFormRepository(private val db: FirebaseFirestore) {
     }
 
     fun observeLearnerProfile(): Flow<LearnerProfileDoc?> = flow {
+        val firestore = db
+        if (firestore == null) {
+            emit(null)
+            return@flow
+        }
         val uid = requireUserId()
         val path = "users/$uid"
         emitAll(
-            db.collection("users").document(uid)
+            firestore.collection("users").document(uid)
                 .snapshots()
                 .map { snapshot ->
                     if (snapshot.exists()) {
@@ -67,7 +79,7 @@ class VoxFormRepository(private val db: FirebaseFirestore) {
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val exceptionToLog = firestoreError ?: (error as? Exception)
-                    if (exceptionToLog != null && auth.currentUser?.uid == uid) {
+                    if (exceptionToLog != null && auth?.currentUser?.uid == uid) {
                         handleFirestoreError(exceptionToLog, OperationType.GET, path)
                     }
                     throw error
@@ -76,10 +88,15 @@ class VoxFormRepository(private val db: FirebaseFirestore) {
     }
 
     fun observePhonemeMastery(): Flow<List<PhonemeMasteryDoc>> = flow {
+        val firestore = db
+        if (firestore == null) {
+            emit(emptyList())
+            return@flow
+        }
         val uid = requireUserId()
         val path = "users/$uid/phonemeMastery"
         emitAll(
-            db.collection("users").document(uid)
+            firestore.collection("users").document(uid)
                 .collection("phonemeMastery")
                 .snapshots()
                 .map { snapshot ->
@@ -94,7 +111,7 @@ class VoxFormRepository(private val db: FirebaseFirestore) {
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val exceptionToLog = firestoreError ?: (error as? Exception)
-                    if (exceptionToLog != null && auth.currentUser?.uid == uid) {
+                    if (exceptionToLog != null && auth?.currentUser?.uid == uid) {
                         handleFirestoreError(exceptionToLog, OperationType.LIST, path)
                     }
                     throw error
@@ -103,10 +120,15 @@ class VoxFormRepository(private val db: FirebaseFirestore) {
     }
 
     fun observePracticeSessions(limitCount: Long = 25L): Flow<List<PracticeSessionDoc>> = flow {
+        val firestore = db
+        if (firestore == null) {
+            emit(emptyList())
+            return@flow
+        }
         val uid = requireUserId()
         val path = "users/$uid/practiceSessions"
         emitAll(
-            db.collection("users").document(uid)
+            firestore.collection("users").document(uid)
                 .collection("practiceSessions")
                 .orderBy("createdAt", Query.Direction.DESCENDING)
                 .limit(limitCount)
@@ -123,7 +145,7 @@ class VoxFormRepository(private val db: FirebaseFirestore) {
                         .firstOrNull()
                     if (firestoreError == null && error is CancellationException) throw error
                     val exceptionToLog = firestoreError ?: (error as? Exception)
-                    if (exceptionToLog != null && auth.currentUser?.uid == uid) {
+                    if (exceptionToLog != null && auth?.currentUser?.uid == uid) {
                         handleFirestoreError(exceptionToLog, OperationType.LIST, path)
                     }
                     throw error
@@ -132,10 +154,11 @@ class VoxFormRepository(private val db: FirebaseFirestore) {
     }
 
     suspend fun ensureLearnerProfile(fallbackName: String): Result<Unit> {
+        val firestore = db ?: return Result.success(Unit)
         var docPath = "users/unauthenticated"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid)
+            val docRef = firestore.collection("users").document(uid)
             docPath = docRef.path
             val existing = docRef.get().await()
             if (!existing.exists()) {
@@ -163,10 +186,11 @@ class VoxFormRepository(private val db: FirebaseFirestore) {
     }
 
     suspend fun updatePreferredSpeed(speed: TempoStep): Result<Unit> {
+        val firestore = db ?: return Result.success(Unit)
         var docPath = "users/unauthenticated"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid)
+            val docRef = firestore.collection("users").document(uid)
             docPath = docRef.path
             docRef.update(
                 mapOf(
@@ -194,10 +218,13 @@ class VoxFormRepository(private val db: FirebaseFirestore) {
         existingMastery: Map<String, PhonemeMasteryDoc>,
         currentProfile: LearnerProfileDoc?
     ): Result<Unit> {
+        val firestore = db ?: return Result.failure(
+            IllegalStateException("Modo local ativo — configure GOOGLE_SERVICES_JSON no GitHub para sincronizar na nuvem.")
+        )
         var activePath = "users/unauthenticated/practiceSessions"
         return try {
             val uid = requireUserId()
-            val userDoc = db.collection("users").document(uid)
+            val userDoc = firestore.collection("users").document(uid)
 
             // 1. Append immutable PracticeSession document
             val sessionRef = userDoc.collection("practiceSessions").document()
@@ -322,11 +349,12 @@ class VoxFormRepository(private val db: FirebaseFirestore) {
     }
 
     suspend fun deleteSession(sessionId: String): Result<Unit> {
+        val firestore = db ?: return Result.success(Unit)
         var docPath = "users/unauthenticated/practiceSessions/$sessionId"
         return try {
             val uid = requireUserId()
             require(sessionId.isNotBlank()) { "Session ID cannot be blank" }
-            val ref = db.collection("users").document(uid)
+            val ref = firestore.collection("users").document(uid)
                 .collection("practiceSessions").document(sessionId)
             docPath = ref.path
             ref.delete().await()

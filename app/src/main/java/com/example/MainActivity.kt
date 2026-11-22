@@ -99,6 +99,21 @@ private enum class StudioTab(
 
 @Composable
 private fun VoxFormAppRoot() {
+    val context = LocalContext.current
+    val firebaseReady = remember(context) { com.example.data.isFirebaseAvailable(context) }
+
+    if (!firebaseReady) {
+        key("local_studio") {
+            AuthenticatedStudioShell(
+                uid = "local_studio",
+                displayName = "VoxForm Studio",
+                email = "Modo local (adicione GOOGLE_SERVICES_JSON no GitHub para nuvem/IA)",
+                onSignedOut = {}
+            )
+        }
+        return
+    }
+
     var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
 
     DisposableEffect(Unit) {
