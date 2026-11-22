@@ -21,25 +21,41 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
-      - name: Set up Android SDK
+      - name: Set up Android SDK & Licenses
         uses: android-actions/setup-android@v3
+
+      - name: Install Android 36.1 SDK & Build Tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36.1" "build-tools;36.0.0"
 
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.3.1"
 
-      - name: Restore Android debug keystore
+      - name: Restore or generate CI debug keystore
         run: |
           if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
             base64 -d debug.keystore.base64 > debug.keystore
             echo "Decoded debug.keystore from debug.keystore.base64"
+          elif [ ! -f debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            echo "Generated fallback CI debug.keystore"
           fi
           if [ ! -f .env ] && [ -f .env.example ]; then
             cp .env.example .env
@@ -66,13 +82,16 @@ jobs:
             -PVOXFORM_VERSION_CODE=${{ steps.version.outputs.version_code }} \
             -PVOXFORM_VERSION_NAME=${{ steps.version.outputs.version_name }} \
             -PVOXFORM_GITHUB_REPO=${{ github.repository }} \
-            --no-daemon
+            --no-daemon \
+            --no-configuration-cache \
+            --stacktrace
 
-      - name: Prepare versioned APK asset
+      - name: Prepare versioned and latest APK assets
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk "dist/${{ steps.version.outputs.apk_filename }}"
-          ls -lh "dist/${{ steps.version.outputs.apk_filename }}"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/VoxForm-latest.apk"
+          ls -lh dist/
 
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4
@@ -90,5 +109,6 @@ jobs:
           make_latest: true
           files: |
             dist/${{ steps.version.outputs.apk_filename }}
+            dist/VoxForm-latest.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
